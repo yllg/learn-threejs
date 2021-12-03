@@ -28,7 +28,7 @@
 
         // 辅助坐标系  参数250表示坐标系大小，可以根据场景大小去设置
         // X:H红线；Y:绿线；Z：蓝线
-        var axisHelper = new THREE.AxisHelper(250);
+        var axisHelper = new THREE.AxesHelper(250);
         scene.add(axisHelper);
 
         /**
@@ -67,101 +67,129 @@
         document.body.appendChild(renderer.domElement); //body元素中插入canvas对象
 
 
+        // 最新文档地址：https://threejs.org/docs/?q=skin#api/en/objects/SkinnedMesh
+        // 主函数
+        let initBones = () => {
+            //下面是一些会用到的参数
+            var segmentHeight = 16; //每段的高度
+            var segmentCount = 4; //段数
+            var height = segmentHeight * segmentCount; //总高度
+            var halfHeight = height * 0.5; //一般高度
+            var sizing = {
+                segmentHeight: segmentHeight,
+                segmentCount: segmentCount,
+                height: height,
+                halfHeight: halfHeight
+            };
+
+            var geometry = createGeometry(sizing); //这是生成几何体的方法，主要是根据顶点生成对应的skinIndex和skinWeight属性
+            var bones = createBones(sizing); //这是生成骨骼的方法
+            mesh = createMesh(geometry, bones); //这是生成蒙皮网格的方法
+            mesh.scale.multiplyScalar(1);
+            scene.add(mesh);
+        }
+
+        // 这是生成几何体的方法，主要是根据顶点生成对应的skinIndex和skinWeight属性
+        let createGeometry = (sizing) => {
+            //创建一个圆柱体
+            var geometry = new THREE.CylinderBufferGeometry(
+                5, // 上面半径
+                5, // 下面半径
+                sizing.height, // 总高度
+                8, // 圆形面分段数
+                sizing.segmentCount * 3, // 沿高度的分段数4*3
+                true // 无上下面
+            );
+            var position = geometry.attributes.position; //圆柱体顶点位置集合
+            var vertex = new THREE.Vector3(); //创建一个三维向量用于保存顶点坐标
+            var skinIndices = []; //顶点索引聚合
+            var skinWeights = []; //顶点权重聚合
+            for (var i = 0; i < position.count; i++) { //遍历顶点
+                vertex.fromBufferAttribute(position, i); //依次取出每个点
+                var y = (vertex.y + sizing.halfHeight); //y保存相对于圆柱体底面的高度值。
+                //这两行比较重要
+                var skinIndex = Math.floor(y / sizing.segmentHeight); //高度除以总高度在向下取整，得到当前的skinIndex
+                var skinWeight = (y % sizing.segmentHeight) / sizing.segmentHeight; //当前的y值占该段的百分比
+                skinIndices.push(skinIndex, skinIndex + 1, 0, 0); //该点关联bone[skinIndex]和bone[skinIndex+1]
+                skinWeights.push(1 - skinWeight, skinWeight, 0,
+                    0); //关联bone[skinIndex]的比重为1 - skinWeight，关联bone[skinIndex+1]的比重为skinWeight。
+                //举个例子，第一个y值刚好为0。那么skinIndex为0，skinWeight也为0。所以呢该点相关的骨骼索引为0和1，权重分别是1和0，也就是该点只与bone[0]有关。
+                //再比如y值为4，那么skinIndex为0，skinWeight也为0.5，所以呢该点相关的骨骼索引为0和1，权重分别是0.5和0.5，也就是该点与bone[0]和bone[1]都相关。其实也很容易理解，因为4恰好在该分段的中间，所以决定于两个骨骼点的状态。
+            }
+            geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(skinIndices, 4)); //几何体中添加skinIndex属性
+            geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(skinWeights,
+                4)); //几何体中添加skinWeight属性
+            return geometry;
+        }
+
+        //生成骨骼
+        let createBones = (sizing) => {
+            bones = []; //骨骼数组
+            var prevBone = new THREE.Bone(); //根骨骼节点
+            bones.push(prevBone); //数组中添加根骨骼节点
+            prevBone.position.y = -sizing.halfHeight; //为根骨骼添加位置
+            for (var i = 0; i < sizing.segmentCount; i++) { //遍历分段
+                var bone = new THREE.Bone(); //创建骨骼节点
+                bone.position.y = sizing.segmentHeight; //为骨骼节点添加本地位置 虽然本地设置的位置都是一样的，但是由于这些骨骼都是父子关系，所以在世界坐标系上位置不同
+                bones.push(bone); //数组中继续添加骨骼
+                prevBone.add(bone); //根骨骼添加当前骨骼
+                prevBone = bone; //再将当前骨骼赋值给根骨骼
+
+            }
+            return bones;
+        }
+
+        //这是生成蒙皮网格的方法
+        let createMesh = (geometry, bones) => {
+            //创建一个带蒙皮的材质
+            var material = new THREE.MeshPhongMaterial({
+                skinning: true, //重点: 允许蒙皮动画
+                color: 0x156289,
+                emissive: 0x072534,
+                side: THREE.DoubleSide,
+                flatShading: true
+            });
+            var mesh = new THREE.SkinnedMesh(geometry, material); //创建蒙皮网格
+            mesh.add(bones[0]); //网格添加根骨骼节点（此例bones[0]为根节点）
+            // 挂到全局，方便render中更新
+            window.skeleton = new THREE.Skeleton(bones); //创建骨架
+            mesh.bind(skeleton); //网格绑定骨架
+            skeletonHelper = new THREE.SkeletonHelper(mesh); //创建骨骼显示助手
+            skeletonHelper.material.linewidth = 2;
+            scene.add(skeletonHelper);
+            return mesh;
+        }
+
+        // 执行主函数
+        initBones();
+        render();
+
         //执行渲染操作   指定场景、相机作为参数
-        // 创建一个时钟对象Clock
-        var clock = new THREE.Clock();
+        var n = 0;
+        var T = 50;
+        var step = 0.01;
         // 渲染函数
         function render() {
             renderer.render(scene, camera); //执行渲染操作
             requestAnimationFrame(render); //请求再次执行渲染函数render，渲染下一帧
-        }
-        render();
-        // 通过引入OrbitControls.js控件实现，目录 examples\js\controls
-        var controls = new THREE.OrbitControls(camera, renderer.domElement); //创建控件对象
-
-
-       /**
-         * 创建骨骼网格模型SkinnedMesh
-         * 创建一个圆柱几何体，高度120，顶点坐标y分量范围[-60,60]
-         */
-        var geometry = new THREE.CylinderGeometry(5, 10, 120, 50, 300);
-        geometry.translate(0, 60, 0); //平移后，y分量范围[0,120]
-        console.log("geometry.vertices", geometry.vertices); //控制台查看顶点坐标
-        console.log("geometry.attributes.position", geometry.attributes.position); //控制台查看顶点坐标
-        
-        /**
-         * 设置几何体对象Geometry的蒙皮索引skinIndices、权重skinWeights属性
-         * 实现一个模拟腿部骨骼运动的效果
-         */
-        //遍历几何体顶点，为每一个顶点设置蒙皮索引、权重属性
-        //根据y来分段，0~60一段、60~100一段、100~120一段
-        let position = geometry.attributes.position;
-        for (var i = 0; i < position.count; i++) {
-            var vertex = new THREE.Vector3();
-            vertex.fromBufferAttribute( position, i ); //第i个顶点
-            if (vertex.y <= 60) {
-                // 设置每个顶点蒙皮索引属性  受根关节Bone1影响
-                geometry.attributes.skinIndices.push(new THREE.Vector4(0, 0, 0, 0));
-                // 设置每个顶点蒙皮权重属性
-                // 影响该顶点关节Bone1对应权重是1-vertex.y/60
-                geometry.attributes.skinWeights.push(new THREE.Vector4(1 - vertex.y / 60, 0, 0, 0));
-            } else if (60 < vertex.y && vertex.y <= 60 + 40) {
-                // Vector4(1, 0, 0, 0)表示对应顶点受关节Bone2影响
-                geometry.attributes.skinIndices.push(new THREE.Vector4(1, 0, 0, 0));
-                // 影响该顶点关节Bone2对应权重是1-(vertex.y-60)/40
-                geometry.attributes.skinWeights.push(new THREE.Vector4(1 - (vertex.y - 60) / 40, 0, 0, 0));
-            } else if (60 + 40 < vertex.y && vertex.y <= 60 + 40 + 20) {
-                // Vector4(2, 0, 0, 0)表示对应顶点受关节Bone3影响
-                geometry.attributes.skinIndices.push(new THREE.Vector4(2, 0, 0, 0));
-                // 影响该顶点关节Bone3对应权重是1-(vertex.y-100)/20
-                geometry.attributes.skinWeights.push(new THREE.Vector4(1 - (vertex.y - 100) / 20, 0, 0, 0));
+            n += 1;
+            if (n < T) {
+                // 改变骨关节角度
+                skeleton.bones[0].rotation.x = skeleton.bones[0].rotation.x - step;
+                skeleton.bones[1].rotation.x = skeleton.bones[1].rotation.x + step;
+                skeleton.bones[2].rotation.x = skeleton.bones[2].rotation.x + 2 * step;
+            }
+            if (n < 2 * T && n > T) {
+                skeleton.bones[0].rotation.x = skeleton.bones[0].rotation.x + step;
+                skeleton.bones[1].rotation.x = skeleton.bones[1].rotation.x - step;
+                skeleton.bones[2].rotation.x = skeleton.bones[2].rotation.x - 2 * step;
+            }
+            if (n === 2 * T) {
+                n = 0;
             }
         }
-        // 材质对象
-        var material = new THREE.MeshPhongMaterial({
-            skinning: true, //允许蒙皮动画
-            // wireframe:true,
-        });
-        // 创建骨骼网格模型
-        var SkinnedMesh = new THREE.SkinnedMesh(geometry, material);
-        SkinnedMesh.position.set(50, 120, 50); //设置网格模型位置
-        SkinnedMesh.rotateX(Math.PI); //旋转网格模型
-        scene.add(SkinnedMesh); //网格模型添加到场景中
-
-        /**
-         * 骨骼系统
-         */
-        var Bone1 = new THREE.Bone(); //关节1，用来作为根关节
-        var Bone2 = new THREE.Bone(); //关节2
-        var Bone3 = new THREE.Bone(); //关节3
-        // 设置关节父子关系   多个骨头关节构成一个树结构
-        Bone1.add(Bone2);
-        Bone2.add(Bone3);
-        // 设置关节之间的相对位置
-        //根关节Bone1默认位置是(0,0,0)
-        Bone2.position.y = 60; //Bone2相对父对象Bone1位置
-        Bone3.position.y = 40; //Bone3相对父对象Bone2位置
-
-        // 所有Bone对象插入到Skeleton中，全部设置为.bones属性的元素
-        var skeleton = new THREE.Skeleton([Bone1, Bone2, Bone3]); //创建骨骼系统
-        // console.log(skeleton.bones);
-        // 返回所有关节的世界坐标
-        // skeleton.bones.forEach(elem => {
-        //   console.log(elem.getWorldPosition(new THREE.Vector3()));
-        // });
-        //骨骼关联网格模型
-        SkinnedMesh.add(Bone1); //根骨头关节添加到网格模型
-        SkinnedMesh.bind(skeleton); //网格模型绑定到骨骼系统
-        console.log(SkinnedMesh);
-        /**
-         * 骨骼辅助显示
-         */
-        var skeletonHelper = new THREE.SkeletonHelper(SkinnedMesh);
-        scene.add(skeletonHelper);
-
-        // 转动关节带动骨骼网格模型出现弯曲效果  好像腿弯曲一样
-        skeleton.bones[1].rotation.x = 0.5;
-        skeleton.bones[2].rotation.x = 0.5;
+        // 通过引入OrbitControls.js控件实现，目录 examples\js\controls
+        var controls = new THREE.OrbitControls(camera, renderer.domElement); //创建控件对象
     </script>
 </body>
 
