@@ -122,7 +122,23 @@
         mesh3.translateZ(120); //球体网格模型沿X轴正方向平移120
         // mesh3.position.set(120,0,0);//设置mesh3模型对象的xyz坐标为120,0,0
         scene.add(mesh3); //网格模型添加到场景中
+        // 绕特定向量表示的轴 旋转一个角度
+        var axis = new THREE.Vector3(0, 0, 1); //向量axis
+        mesh3.rotateOnAxis(axis, Math.PI / 2); //绕axis轴旋转π/8
 
+        var geometry = new THREE.BoxGeometry(100, 100, 100); //创建一个立方体几何对象Geometry
+        // 线条渲染模式
+        var material = new THREE.LineBasicMaterial({
+            color: 0xff0000 //线条颜色
+        }); //材质对象
+        // 创建线模型对象   构造函数：Line、LineLoop、LineSegments
+        // var line = new THREE.Line(geometry, material); //线条模型对象
+        // LineLoop 连线会闭合, 把第一个顶点和最后一个顶点连接起来
+        // LineSegments 顶点不共享，第1、2点确定一条线，第3、4顶点确定一条直线，第2和3点之间不连接
+        // var line = new THREE.LineLoop(geometry, material); //线条模型对象
+        var line = new THREE.LineSegments(geometry, material); //线条模型对象
+        scene.add(line);
+        line.translateZ(300);
 
         function render() {
             renderer.render(scene, camera); //执行渲染操作
