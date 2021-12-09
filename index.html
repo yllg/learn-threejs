@@ -47,6 +47,15 @@
         // scene.add(ambient);
         // console.log(scene)
         // console.log(scene.children)
+        // 聚光灯
+        var spotLight = new THREE.SpotLight(0xffffff);
+        spotLight.position.set(400, 200, 300);
+        scene.add(spotLight);
+
+        // 光源辅助对象
+        var spotLightHelper = new THREE.SpotLightHelper(spotLight, "#000");
+        scene.add(spotLightHelper);
+
         /**
          * 相机设置
          */
