@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>gltfloader</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            /* 隐藏body窗口区域滚动条 */
+        }
+    </style>
+    <!--引入three.js三维引擎-->
+    <!-- <script src="http://www.yanhuangxueyuan.com/versions/threejsR92/build/three.js"></script> -->
+    <!-- <script src="http://www.yanhuangxueyuan.com/threejs/build/three.js"></script> -->
+    <!-- 最新的插件要和最新的three匹配 -->
+    <script src="../three.js"></script>
+    <script src="../OrbitControls.js"></script>
+    <script src="./GLTFLoader.js"></script>
+    <script src="./DRACOLoader.js"></script>
+</head>
+
+<body>
+    <script>
+        let scene, renderer, camera;
+        let model, skeleton, mixer, clock;
+        let breakDanceAction;
+
+        const container = document.body;
+        camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 1000 );
+        camera.position.set( 1, 2, - 3 );
+        camera.lookAt( 0, 1, 0 );
+
+        clock = new THREE.Clock();
+
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color( 0xa0a0a0 );
+        scene.fog = new THREE.Fog( 0xa0a0a0, 10, 50 );
+
+        const dirLight = new THREE.DirectionalLight( 0xffffff );
+        dirLight.position.set( - 3, 10, - 10 );
+        dirLight.castShadow = true;
+        dirLight.shadow.camera.top = 2;
+        dirLight.shadow.camera.bottom = - 2;
+        dirLight.shadow.camera.left = - 2;
+        dirLight.shadow.camera.right = 2;
+        dirLight.shadow.camera.near = 0.1;
+        dirLight.shadow.camera.far = 40;
+        scene.add( dirLight );
+
+        // 加载 gltf、glb模型
+        const loader = new THREE.GLTFLoader();
+        const dracoLoader = new THREE.DRACOLoader();
+        dracoLoader.setDecoderPath('./draco/');
+        loader.setDRACOLoader(dracoLoader);
+        loader.load('./倒立freeze-processed.glb', (gltf) => {
+            console.log("🚀gltf", gltf)
+            model = gltf.scene;
+            // model.position.set(10, 0, 0);
+            scene.add( model );
+            model.traverse( ( object ) => {
+                if ( object.isMesh ) object.castShadow = true;
+            } );
+            skeleton = new THREE.SkeletonHelper( model );
+            skeleton.visible = false;
+            scene.add( skeleton );
+            const animations = gltf.animations;
+            mixer = new THREE.AnimationMixer( model );
+            breakDanceAction = mixer.clipAction( animations[ 0 ] );
+            breakDanceAction.play();
+            render();
+        });
+
+        renderer = new THREE.WebGLRenderer( { antialias: true } );
+        renderer.setSize( window.innerWidth, window.innerHeight );
+        renderer.outputEncoding = THREE.sRGBEncoding;
+        // renderer.shadowMap.enabled = true;
+        container.appendChild( renderer.domElement );
+
+        function render() {
+            requestAnimationFrame(render); //请求再次执行渲染函数render
+            let mixerUpdateDelta = clock.getDelta();
+            mixer.update( mixerUpdateDelta );
+            renderer.render(scene, camera); //执行渲染操作
+        }
+
+        // 通过引入OrbitControls.js控件实现，目录 examples\js\controls
+        var controls = new THREE.OrbitControls(camera, renderer.domElement); //创建控件对象
+
+         // 辅助坐标系  参数250表示坐标系大小，可以根据场景大小去设置
+        // X:H红线；Y:绿线；Z：蓝线
+        var axisHelper = new THREE.AxesHelper(250);
+        scene.add(axisHelper);
+    </script>
+</body>
+
+</html>
